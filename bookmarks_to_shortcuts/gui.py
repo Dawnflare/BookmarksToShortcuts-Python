@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 import sys
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -10,6 +12,14 @@ from tkinter import filedialog, messagebox, ttk
 from .exporter import BookmarkExporter, DuplicateStrategy, StructureMode
 from .raw import RawBookmarkFile
 from .tree import BookmarkTreeBuilder
+
+
+@dataclass
+class ExportContext:
+    exporter: BookmarkExporter
+    nodes: list
+    base_output: Path
+    timestamp_suffix: str
 
 
 class BookmarkExporterGUI(tk.Tk):
@@ -124,11 +134,12 @@ class BookmarkExporterGUI(tk.Tk):
             self.output_var.set(path)
 
     def _export(self) -> None:
-        context = self._prepare_export_context()
+        context = self._prepare_export_context(create_destination=True)
         if context is None:
             return
 
-        exporter, nodes, _ = context
+        exporter = context.exporter
+        nodes = context.nodes
         try:
             result = exporter.export(nodes)
         except Exception as exc:  # pragma: no cover - GUI-only
@@ -140,12 +151,13 @@ class BookmarkExporterGUI(tk.Tk):
         self.status_var.set(message)
 
     def _export_html(self) -> None:
-        context = self._prepare_export_context()
+        context = self._prepare_export_context(create_destination=False)
         if context is None:
             return
 
-        exporter, nodes, output_path = context
-        html_path = output_path / "bookmarks.html"
+        exporter = context.exporter
+        nodes = context.nodes
+        html_path = context.base_output / f"bookmarks_{context.timestamp_suffix}.html"
         try:
             count = exporter.export_html(nodes, html_path)
         except Exception as exc:  # pragma: no cover - GUI-only
@@ -157,12 +169,13 @@ class BookmarkExporterGUI(tk.Tk):
         self.status_var.set(message)
 
     def _export_text(self) -> None:
-        context = self._prepare_export_context()
+        context = self._prepare_export_context(create_destination=False)
         if context is None:
             return
 
-        exporter, nodes, output_path = context
-        text_path = output_path / "bookmarks.txt"
+        exporter = context.exporter
+        nodes = context.nodes
+        text_path = context.base_output / f"bookmarks_{context.timestamp_suffix}.txt"
         try:
             count = exporter.export_text(nodes, text_path)
         except Exception as exc:  # pragma: no cover - GUI-only
@@ -173,7 +186,7 @@ class BookmarkExporterGUI(tk.Tk):
         message = f"Exported {count} bookmarks to {text_path.name}"
         self.status_var.set(message)
 
-    def _prepare_export_context(self):
+    def _prepare_export_context(self, create_destination: bool):
         bookmarks_path = Path(self.bookmarks_var.get()).expanduser()
         output_path = Path(self.output_var.get()).expanduser()
 
@@ -199,13 +212,64 @@ class BookmarkExporterGUI(tk.Tk):
             self.status_var.set("Export failed. See error message above.")
             return None
 
+        try:
+            if create_destination:
+                destination, timestamp_suffix = self._create_destination_folder(output_path)
+            else:
+                destination = output_path
+                timestamp_suffix = self._next_timestamp_suffix(output_path)
+        except OSError as exc:
+            messagebox.showerror("Invalid destination", str(exc))
+            return None
+
         exporter = BookmarkExporter(
-            output_root=output_path,
+            output_root=destination,
             include_full_path=self.include_full_path_var.get(),
             duplicate_strategy=DuplicateStrategy(self.duplicate_strategy_var.get()),
             structure_mode=StructureMode.from_label(self.structure_mode_var.get()),
         )
-        return exporter, nodes, output_path
+        return ExportContext(
+            exporter=exporter,
+            nodes=nodes,
+            base_output=output_path,
+            timestamp_suffix=timestamp_suffix,
+        )
+
+    def _create_destination_folder(self, base_path: Path) -> tuple[Path, str]:
+        """Create a timestamped folder for the current export session."""
+
+        candidate, label = self._next_destination_folder(base_path)
+        candidate.mkdir(parents=True, exist_ok=False)
+        return candidate, label
+
+    def _next_timestamp_suffix(self, base_path: Path) -> str:
+        """Generate a timestamp label unique among exported files."""
+
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M")
+        suffix = timestamp
+        counter = 2
+        while any(
+            (base_path / f"bookmarks_{suffix}{extension}").exists()
+            for extension in (".html", ".txt")
+        ):
+            suffix = f"{timestamp}_{counter}"
+            counter += 1
+        return suffix
+
+    def _next_destination_folder(self, base_path: Path) -> tuple[Path, str]:
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M")
+        base_name = f"Bookmarks_{timestamp}"
+        candidate = base_path / base_name
+        suffix = 2
+        while candidate.exists():
+            candidate = base_path / f"{base_name}_{suffix}"
+            suffix += 1
+        label = (
+            candidate.name.split("Bookmarks_", 1)[-1]
+            if "Bookmarks_" in candidate.name
+            else candidate.name
+        )
+        return candidate, label
 
 
 def hide_console_window() -> None:
