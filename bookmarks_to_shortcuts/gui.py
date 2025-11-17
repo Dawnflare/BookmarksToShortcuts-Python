@@ -264,9 +264,12 @@ class BookmarkExporterGUI(tk.Tk):
             return
         bookmarks_path = Path(self.bookmarks_var.get()).expanduser()
         if not bookmarks_path.exists():
-        self._show_tree_placeholder("Select a valid Bookmarks file to choose folders.")
+            self._show_tree_placeholder("Select a valid Bookmarks file to choose folders.")
             if not (initial or silent):
-                messagebox.showerror("Bookmarks file missing", "Please pick a valid Brave Bookmarks file.")
+                messagebox.showerror(
+                    "Bookmarks file missing",
+                    "Please pick a valid Brave Bookmarks file.",
+                )
             return
         try:
             raw = RawBookmarkFile.load(bookmarks_path)
