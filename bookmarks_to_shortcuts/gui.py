@@ -126,7 +126,6 @@ class BookmarkExporterGUI(tk.Tk):
 
         message = f"Created {len(result.created_files)} shortcuts; skipped {len(result.skipped)}"
         self.status_var.set(message)
-        messagebox.showinfo("Export finished", message)
 
     def _export_html(self) -> None:
         context = self._prepare_export_context()
@@ -144,7 +143,6 @@ class BookmarkExporterGUI(tk.Tk):
 
         message = f"Exported {count} bookmarks to {html_path.name}"
         self.status_var.set(message)
-        messagebox.showinfo("Export finished", message)
 
     def _export_text(self) -> None:
         context = self._prepare_export_context()
@@ -162,7 +160,6 @@ class BookmarkExporterGUI(tk.Tk):
 
         message = f"Exported {count} bookmarks to {text_path.name}"
         self.status_var.set(message)
-        messagebox.showinfo("Export finished", message)
 
     def _prepare_export_context(self):
         bookmarks_path = Path(self.bookmarks_var.get()).expanduser()
