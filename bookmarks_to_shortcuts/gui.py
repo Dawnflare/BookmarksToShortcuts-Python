@@ -49,7 +49,7 @@ class BookmarkExporterGUI(tk.Tk):
         )
 
         # Output directory input
-        ttk.Label(frame, text="Destination folder for shortcuts:").grid(
+        ttk.Label(frame, text="Destination folder for exports:").grid(
             column=0, row=2, sticky="w"
         )
         output_entry = ttk.Entry(frame, textvariable=self.output_var, width=50)
@@ -91,9 +91,15 @@ class BookmarkExporterGUI(tk.Tk):
         ttk.Button(frame, text="Export Shortcuts", command=self._export).grid(
             column=0, row=6, columnspan=2, sticky="we", **padding
         )
+        ttk.Button(frame, text="Export as HTML", command=self._export_html).grid(
+            column=0, row=7, columnspan=2, sticky="we", **padding
+        )
+        ttk.Button(
+            frame, text="Export as text document", command=self._export_text
+        ).grid(column=0, row=8, columnspan=2, sticky="we", **padding)
 
         status_label = ttk.Label(frame, textvariable=self.status_var, foreground="#555555")
-        status_label.grid(column=0, row=7, columnspan=2, sticky="w", pady=(0, 5))
+        status_label.grid(column=0, row=9, columnspan=2, sticky="w", pady=(0, 5))
 
     def _choose_bookmarks(self) -> None:
         path = filedialog.askopenfilename(title="Select Brave Bookmarks file", filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")])
@@ -106,31 +112,12 @@ class BookmarkExporterGUI(tk.Tk):
             self.output_var.set(path)
 
     def _export(self) -> None:
-        bookmarks_path = Path(self.bookmarks_var.get()).expanduser()
-        output_path = Path(self.output_var.get()).expanduser()
-
-        if not bookmarks_path.exists():
-            messagebox.showerror("Invalid path", "Please select a valid Brave Bookmarks file.")
+        context = self._prepare_export_context()
+        if context is None:
             return
-        if not output_path.exists():
-            try:
-                output_path.mkdir(parents=True, exist_ok=True)
-            except OSError as exc:
-                messagebox.showerror("Invalid destination", str(exc))
-                return
 
-        include_roots = [name for name, var in self.root_vars.items() if var.get()]
-        include_roots = include_roots or None
-
+        exporter, nodes, _ = context
         try:
-            raw = RawBookmarkFile.load(bookmarks_path)
-            tree = BookmarkTreeBuilder(raw)
-            nodes = tree.build(include_roots=include_roots)
-            exporter = BookmarkExporter(
-                output_root=output_path,
-                include_full_path=self.include_full_path_var.get(),
-                duplicate_strategy=DuplicateStrategy(self.duplicate_strategy_var.get()),
-            )
             result = exporter.export(nodes)
         except Exception as exc:  # pragma: no cover - GUI-only
             messagebox.showerror("Export failed", str(exc))
@@ -140,6 +127,75 @@ class BookmarkExporterGUI(tk.Tk):
         message = f"Created {len(result.created_files)} shortcuts; skipped {len(result.skipped)}"
         self.status_var.set(message)
         messagebox.showinfo("Export finished", message)
+
+    def _export_html(self) -> None:
+        context = self._prepare_export_context()
+        if context is None:
+            return
+
+        exporter, nodes, output_path = context
+        html_path = output_path / "bookmarks.html"
+        try:
+            count = exporter.export_html(nodes, html_path)
+        except Exception as exc:  # pragma: no cover - GUI-only
+            messagebox.showerror("Export failed", str(exc))
+            self.status_var.set("Export failed. See error message above.")
+            return
+
+        message = f"Exported {count} bookmarks to {html_path.name}"
+        self.status_var.set(message)
+        messagebox.showinfo("Export finished", message)
+
+    def _export_text(self) -> None:
+        context = self._prepare_export_context()
+        if context is None:
+            return
+
+        exporter, nodes, output_path = context
+        text_path = output_path / "bookmarks.txt"
+        try:
+            count = exporter.export_text(nodes, text_path)
+        except Exception as exc:  # pragma: no cover - GUI-only
+            messagebox.showerror("Export failed", str(exc))
+            self.status_var.set("Export failed. See error message above.")
+            return
+
+        message = f"Exported {count} bookmarks to {text_path.name}"
+        self.status_var.set(message)
+        messagebox.showinfo("Export finished", message)
+
+    def _prepare_export_context(self):
+        bookmarks_path = Path(self.bookmarks_var.get()).expanduser()
+        output_path = Path(self.output_var.get()).expanduser()
+
+        if not bookmarks_path.exists():
+            messagebox.showerror("Invalid path", "Please select a valid Brave Bookmarks file.")
+            return None
+        if not output_path.exists():
+            try:
+                output_path.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                messagebox.showerror("Invalid destination", str(exc))
+                return None
+
+        include_roots = [name for name, var in self.root_vars.items() if var.get()]
+        include_roots = include_roots or None
+
+        try:
+            raw = RawBookmarkFile.load(bookmarks_path)
+            tree = BookmarkTreeBuilder(raw)
+            nodes = tree.build(include_roots=include_roots)
+        except Exception as exc:  # pragma: no cover - GUI-only
+            messagebox.showerror("Export failed", str(exc))
+            self.status_var.set("Export failed. See error message above.")
+            return None
+
+        exporter = BookmarkExporter(
+            output_root=output_path,
+            include_full_path=self.include_full_path_var.get(),
+            duplicate_strategy=DuplicateStrategy(self.duplicate_strategy_var.get()),
+        )
+        return exporter, nodes, output_path
 
 
 def hide_console_window() -> None:
