@@ -1,0 +1,138 @@
+############################
+# Build artifacts
+############################
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+[Ll]ogs/
+
+# VS intermediate build files
+*.obj
+*.exe
+*.dll
+*.pdb
+*.cache
+*.ilk
+*.log
+*.tmp
+*.tmp_proj
+*.user
+*.vspscc
+*_i.c
+*_p.c
+*.vsp
+*.vspx
+*.pidb
+*.svclog
+*.scc
+
+############################
+# Visual Studio
+############################
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# VS Code
+.vscode/
+.history/
+
+############################
+# Rider / JetBrains
+############################
+.idea/
+*.sln.iml
+
+############################
+# .NET / NuGet
+############################
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nuget.props
+*.nuget.targets
+*.nupkg
+*.snupkg
+packages/
+**/packages/*
+!**/packages/build/
+!**/packages/repositories.config
+
+# Local NuGet config (if you use machine-specific feeds)
+NuGet.Config
+
+############################
+# Build results
+############################
+*.appx
+*.appxbundle
+*.appxupload
+*.msix
+*.msixbundle
+*.msixupload
+
+# Publish outputs
+**/publish/
+**/PublishProfiles/*.pubxml
+**/PublishProfiles/*.pubxml.user
+
+############################
+# Testing
+############################
+[Tt]est[Rr]esult*/
+[Tt]est[Rr]esults/
+*.trx
+*.coverage
+*.coveragexml
+
+############################
+# Configuration & secrets
+############################
+*.userprefs
+*.local.json
+*.secret.json
+*.env
+*.env.local
+
+# If you use appsettings.*.json overrides locally:
+appsettings.Development.json
+appsettings.Local.json
+
+############################
+# Resharper & other tools
+############################
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+############################
+# OS-specific
+############################
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.cache/
+*.swp
+
+############################
+# Misc
+############################
+*.orig
+*.bak
+*.old
+
+# Rider / VS solution-level metadata backup
+*.sln.cache
