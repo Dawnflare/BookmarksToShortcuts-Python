@@ -45,3 +45,24 @@ logs/
 Thumbs.db
 desktop.ini
 .DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.cache/
+*.swp
+
+############################
+# Misc
+############################
+*.orig
+*.bak
+*.old
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Rider / VS solution-level metadata backup
+*.sln.cache
