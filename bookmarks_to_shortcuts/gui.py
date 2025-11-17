@@ -134,7 +134,7 @@ class BookmarkExporterGUI(tk.Tk):
             self.output_var.set(path)
 
     def _export(self) -> None:
-        context = self._prepare_export_context()
+        context = self._prepare_export_context(create_destination=True)
         if context is None:
             return
 
@@ -151,7 +151,7 @@ class BookmarkExporterGUI(tk.Tk):
         self.status_var.set(message)
 
     def _export_html(self) -> None:
-        context = self._prepare_export_context()
+        context = self._prepare_export_context(create_destination=False)
         if context is None:
             return
 
@@ -169,7 +169,7 @@ class BookmarkExporterGUI(tk.Tk):
         self.status_var.set(message)
 
     def _export_text(self) -> None:
-        context = self._prepare_export_context()
+        context = self._prepare_export_context(create_destination=False)
         if context is None:
             return
 
@@ -186,7 +186,7 @@ class BookmarkExporterGUI(tk.Tk):
         message = f"Exported {count} bookmarks to {text_path.name}"
         self.status_var.set(message)
 
-    def _prepare_export_context(self):
+    def _prepare_export_context(self, create_destination: bool):
         bookmarks_path = Path(self.bookmarks_var.get()).expanduser()
         output_path = Path(self.output_var.get()).expanduser()
 
@@ -213,7 +213,11 @@ class BookmarkExporterGUI(tk.Tk):
             return None
 
         try:
-            destination, timestamp_suffix = self._create_destination_folder(output_path)
+            if create_destination:
+                destination, timestamp_suffix = self._create_destination_folder(output_path)
+            else:
+                destination = output_path
+                timestamp_suffix = self._next_timestamp_suffix(output_path)
         except OSError as exc:
             messagebox.showerror("Invalid destination", str(exc))
             return None
@@ -234,6 +238,25 @@ class BookmarkExporterGUI(tk.Tk):
     def _create_destination_folder(self, base_path: Path) -> tuple[Path, str]:
         """Create a timestamped folder for the current export session."""
 
+        candidate, label = self._next_destination_folder(base_path)
+        candidate.mkdir(parents=True, exist_ok=False)
+        return candidate, label
+
+    def _next_timestamp_suffix(self, base_path: Path) -> str:
+        """Generate a timestamp label unique among exported files."""
+
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M")
+        suffix = timestamp
+        counter = 2
+        while any(
+            (base_path / f"bookmarks_{suffix}{extension}").exists()
+            for extension in (".html", ".txt")
+        ):
+            suffix = f"{timestamp}_{counter}"
+            counter += 1
+        return suffix
+
+    def _next_destination_folder(self, base_path: Path) -> tuple[Path, str]:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M")
         base_name = f"Bookmarks_{timestamp}"
         candidate = base_path / base_name
@@ -241,8 +264,11 @@ class BookmarkExporterGUI(tk.Tk):
         while candidate.exists():
             candidate = base_path / f"{base_name}_{suffix}"
             suffix += 1
-        candidate.mkdir(parents=True, exist_ok=False)
-        label = candidate.name.split("Bookmarks_", 1)[-1] if "Bookmarks_" in candidate.name else candidate.name
+        label = (
+            candidate.name.split("Bookmarks_", 1)[-1]
+            if "Bookmarks_" in candidate.name
+            else candidate.name
+        )
         return candidate, label
 
 
