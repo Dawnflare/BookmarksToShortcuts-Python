@@ -1,6 +1,7 @@
 """Bookmark export engine."""
 from __future__ import annotations
 
+import html
 import itertools
 import re
 from dataclasses import dataclass
@@ -46,6 +47,25 @@ class BookmarkExporter:
                 continue
             self._export_folder(node, created, skipped, base_components=[])
         return ExportResult(created_files=created, skipped=skipped)
+
+    def export_html(self, nodes: Iterable[BookmarkNode], output_file: Path | str) -> int:
+        """Create a standalone HTML document listing all bookmarks."""
+
+        bookmarks = list(self._iter_bookmark_nodes(nodes))
+        output_path = Path(output_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(self._html_document(bookmarks), encoding="utf-8")
+        return len(bookmarks)
+
+    def export_text(self, nodes: Iterable[BookmarkNode], output_file: Path | str) -> int:
+        """Create a newline-delimited list of bookmark URLs."""
+
+        bookmarks = list(self._iter_bookmark_nodes(nodes))
+        output_path = Path(output_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        urls = [bookmark.url.strip() for bookmark in bookmarks if bookmark.url]
+        output_path.write_text("\n".join(urls), encoding="utf-8")
+        return len(urls)
 
     def _export_folder(
         self,
@@ -108,3 +128,32 @@ class BookmarkExporter:
             if self._folder_contains_bookmarks(child):
                 return True
         return False
+
+    def _iter_bookmark_nodes(self, nodes: Iterable[BookmarkNode]) -> Iterable[BookmarkNode]:
+        for node in nodes:
+            if not node.is_folder and node.url:
+                yield node
+            for descendant in node.iter_descendants():
+                if descendant.is_folder:
+                    continue
+                if not descendant.url:
+                    continue
+                yield descendant
+
+    def _html_document(self, bookmarks: List[BookmarkNode]) -> str:
+        lines = [
+            "<!DOCTYPE html>",
+            "<html lang=\"en\">",
+            "<head>",
+            "  <meta charset=\"utf-8\" />",
+            "  <title>Bookmarks Export</title>",
+            "</head>",
+            "<body>",
+            "  <ul>",
+        ]
+        for bookmark in bookmarks:
+            url = html.escape(bookmark.url or "#", quote=True)
+            label = html.escape(bookmark.name or bookmark.url or "Bookmark")
+            lines.append(f'    <li><a href="{url}">{label}</a></li>')
+        lines.extend(["  </ul>", "</body>", "</html>"])
+        return "\n".join(lines)
