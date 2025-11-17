@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -128,7 +129,7 @@ class BookmarkExporterGUI(tk.Tk):
         if context is None:
             return
 
-        exporter, nodes, _ = context
+        exporter, nodes, _, _ = context
         try:
             result = exporter.export(nodes)
         except Exception as exc:  # pragma: no cover - GUI-only
@@ -144,8 +145,8 @@ class BookmarkExporterGUI(tk.Tk):
         if context is None:
             return
 
-        exporter, nodes, output_path = context
-        html_path = output_path / "bookmarks.html"
+        exporter, nodes, output_path, timestamp_suffix = context
+        html_path = output_path / f"bookmarks_{timestamp_suffix}.html"
         try:
             count = exporter.export_html(nodes, html_path)
         except Exception as exc:  # pragma: no cover - GUI-only
@@ -161,8 +162,8 @@ class BookmarkExporterGUI(tk.Tk):
         if context is None:
             return
 
-        exporter, nodes, output_path = context
-        text_path = output_path / "bookmarks.txt"
+        exporter, nodes, output_path, timestamp_suffix = context
+        text_path = output_path / f"bookmarks_{timestamp_suffix}.txt"
         try:
             count = exporter.export_text(nodes, text_path)
         except Exception as exc:  # pragma: no cover - GUI-only
@@ -199,13 +200,33 @@ class BookmarkExporterGUI(tk.Tk):
             self.status_var.set("Export failed. See error message above.")
             return None
 
+        try:
+            destination, timestamp_suffix = self._create_destination_folder(output_path)
+        except OSError as exc:
+            messagebox.showerror("Invalid destination", str(exc))
+            return None
+
         exporter = BookmarkExporter(
-            output_root=output_path,
+            output_root=destination,
             include_full_path=self.include_full_path_var.get(),
             duplicate_strategy=DuplicateStrategy(self.duplicate_strategy_var.get()),
             structure_mode=StructureMode.from_label(self.structure_mode_var.get()),
         )
-        return exporter, nodes, output_path
+        return exporter, nodes, destination, timestamp_suffix
+
+    def _create_destination_folder(self, base_path: Path) -> tuple[Path, str]:
+        """Create a timestamped folder for the current export session."""
+
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M")
+        base_name = f"Bookmarks_{timestamp}"
+        candidate = base_path / base_name
+        suffix = 2
+        while candidate.exists():
+            candidate = base_path / f"{base_name}_{suffix}"
+            suffix += 1
+        candidate.mkdir(parents=True, exist_ok=False)
+        label = candidate.name.split("Bookmarks_", 1)[-1] if "Bookmarks_" in candidate.name else candidate.name
+        return candidate, label
 
 
 def hide_console_window() -> None:
