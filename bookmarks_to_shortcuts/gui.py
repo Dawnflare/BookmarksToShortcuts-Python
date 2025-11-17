@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 import tkinter as tk
@@ -11,6 +12,14 @@ from tkinter import filedialog, messagebox, ttk
 from .exporter import BookmarkExporter, DuplicateStrategy, StructureMode
 from .raw import RawBookmarkFile
 from .tree import BookmarkTreeBuilder
+
+
+@dataclass
+class ExportContext:
+    exporter: BookmarkExporter
+    nodes: list
+    base_output: Path
+    timestamp_suffix: str
 
 
 class BookmarkExporterGUI(tk.Tk):
@@ -129,7 +138,8 @@ class BookmarkExporterGUI(tk.Tk):
         if context is None:
             return
 
-        exporter, nodes, _, _ = context
+        exporter = context.exporter
+        nodes = context.nodes
         try:
             result = exporter.export(nodes)
         except Exception as exc:  # pragma: no cover - GUI-only
@@ -145,8 +155,9 @@ class BookmarkExporterGUI(tk.Tk):
         if context is None:
             return
 
-        exporter, nodes, output_path, timestamp_suffix = context
-        html_path = output_path / f"bookmarks_{timestamp_suffix}.html"
+        exporter = context.exporter
+        nodes = context.nodes
+        html_path = context.base_output / f"bookmarks_{context.timestamp_suffix}.html"
         try:
             count = exporter.export_html(nodes, html_path)
         except Exception as exc:  # pragma: no cover - GUI-only
@@ -162,8 +173,9 @@ class BookmarkExporterGUI(tk.Tk):
         if context is None:
             return
 
-        exporter, nodes, output_path, timestamp_suffix = context
-        text_path = output_path / f"bookmarks_{timestamp_suffix}.txt"
+        exporter = context.exporter
+        nodes = context.nodes
+        text_path = context.base_output / f"bookmarks_{context.timestamp_suffix}.txt"
         try:
             count = exporter.export_text(nodes, text_path)
         except Exception as exc:  # pragma: no cover - GUI-only
@@ -212,7 +224,12 @@ class BookmarkExporterGUI(tk.Tk):
             duplicate_strategy=DuplicateStrategy(self.duplicate_strategy_var.get()),
             structure_mode=StructureMode.from_label(self.structure_mode_var.get()),
         )
-        return exporter, nodes, destination, timestamp_suffix
+        return ExportContext(
+            exporter=exporter,
+            nodes=nodes,
+            base_output=output_path,
+            timestamp_suffix=timestamp_suffix,
+        )
 
     def _create_destination_folder(self, base_path: Path) -> tuple[Path, str]:
         """Create a timestamped folder for the current export session."""
