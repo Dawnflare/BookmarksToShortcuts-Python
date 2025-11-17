@@ -201,8 +201,8 @@ class BookmarkExporterGUI(tk.Tk):
         if not self.folder_tree:
             return
         item_id = self.folder_tree.identify_row(event.y)
-        image = self.folder_tree.identify("image", event.x, event.y)
-        if not image:
+        element = self.folder_tree.identify("element", event.x, event.y)
+        if element != "image":
             return
         if not item_id:
             return
