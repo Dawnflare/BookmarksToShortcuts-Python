@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from bookmarks_to_shortcuts.exporter import BookmarkExporter, DuplicateStrategy
+from bookmarks_to_shortcuts.exporter import (
+    BookmarkExporter,
+    DuplicateStrategy,
+    StructureMode,
+)
 from bookmarks_to_shortcuts.model import BookmarkNode
 
 
@@ -41,6 +45,21 @@ def test_empty_folders_are_skipped(tmp_path):
     assert not any(tmp_path.iterdir())
 
 
+def test_export_combined_writes_files_in_root(tmp_path):
+    root = make_sample_tree(tmp_path)
+    exporter = BookmarkExporter(
+        tmp_path,
+        include_full_path=False,
+        structure_mode=StructureMode.COMBINED,
+    )
+    result = exporter.export([root])
+    assert {p.parent for p in result.created_files} == {tmp_path}
+    assert sorted(p.name for p in result.created_files) == [
+        "Example _ Docs (2).url",
+        "Example _ Docs.url",
+    ]
+
+
 def test_export_html_orders_sections(tmp_path):
     root = BookmarkNode(id="1", name="Bookmarks Bar", type="folder")
     alpha = BookmarkNode(id="2", name="Alpha", type="folder")
@@ -77,6 +96,20 @@ def test_export_html_orders_sections(tmp_path):
     assert "API Reference" in html
 
 
+def test_export_html_combined_flat_list(tmp_path):
+    root = make_sample_tree(tmp_path)
+    exporter = BookmarkExporter(
+        tmp_path,
+        include_full_path=False,
+        structure_mode=StructureMode.COMBINED,
+    )
+    html_path = tmp_path / "bookmarks.html"
+    exporter.export_html([root], html_path)
+    html = html_path.read_text()
+    assert "<h2>" not in html
+    assert html.count("<li>") == 2
+
+
 def test_export_text_includes_sections(tmp_path):
     root = BookmarkNode(id="1", name="Bookmarks Bar", type="folder")
     misc = BookmarkNode(id="2", name="Misc", type="folder")
@@ -93,3 +126,16 @@ def test_export_text_includes_sections(tmp_path):
     assert count == 1
     assert text.splitlines()[0] == "Bookmarks Bar / Misc"
     assert "Notes - https://notes.example" in text
+
+
+def test_export_text_combined_is_plain_list(tmp_path):
+    root = make_sample_tree(tmp_path)
+    exporter = BookmarkExporter(
+        tmp_path,
+        include_full_path=False,
+        structure_mode=StructureMode.COMBINED,
+    )
+    text_path = tmp_path / "bookmarks.txt"
+    exporter.export_text([root], text_path)
+    text = text_path.read_text().strip().splitlines()
+    assert text == ["https://example.com", "https://example.org"]

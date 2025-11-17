@@ -7,7 +7,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from .exporter import BookmarkExporter, DuplicateStrategy
+from .exporter import BookmarkExporter, DuplicateStrategy, StructureMode
 from .raw import RawBookmarkFile
 from .tree import BookmarkTreeBuilder
 
@@ -30,6 +30,7 @@ class BookmarkExporterGUI(tk.Tk):
         self.output_var = tk.StringVar(value=str(self.DEFAULT_OUTPUT_PATH))
         self.include_full_path_var = tk.BooleanVar(value=False)
         self.duplicate_strategy_var = tk.StringVar(value=DuplicateStrategy.UNIQUE.value)
+        self.structure_mode_var = tk.StringVar(value=StructureMode.PRESERVE.label)
         self.root_vars = {key: tk.BooleanVar(value=True) for key in self.ROOT_KEYS}
         self.status_var = tk.StringVar(value="Select your Bookmarks file and destination.")
 
@@ -87,6 +88,17 @@ class BookmarkExporterGUI(tk.Tk):
         )
         duplicate_combo.grid(column=0, row=2, sticky="w")
         duplicate_combo.current(0)
+
+        ttk.Label(options_frame, text="Bookmark layout:").grid(column=0, row=3, sticky="w", pady=(10, 0))
+        structure_combo = ttk.Combobox(
+            options_frame,
+            textvariable=self.structure_mode_var,
+            values=[mode.label for mode in StructureMode],
+            state="readonly",
+            width=32,
+        )
+        structure_combo.grid(column=0, row=4, sticky="w")
+        structure_combo.current(0)
 
         ttk.Button(frame, text="Export Shortcuts", command=self._export).grid(
             column=0, row=6, columnspan=2, sticky="we", **padding
@@ -191,6 +203,7 @@ class BookmarkExporterGUI(tk.Tk):
             output_root=output_path,
             include_full_path=self.include_full_path_var.get(),
             duplicate_strategy=DuplicateStrategy(self.duplicate_strategy_var.get()),
+            structure_mode=StructureMode.from_label(self.structure_mode_var.get()),
         )
         return exporter, nodes, output_path
 
