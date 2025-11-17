@@ -1,6 +1,8 @@
 """Simple Tkinter GUI for exporting Brave bookmarks on Windows."""
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -14,13 +16,16 @@ class BookmarkExporterGUI(tk.Tk):
     """Lightweight window that wraps the CLI behavior in Tkinter widgets."""
 
     ROOT_KEYS = ("bookmark_bar", "other", "synced", "mobile")
+    DEFAULT_BOOKMARKS_PATH = Path(
+        os.environ.get("USERPROFILE", str(Path.home()))
+    ) / "AppData" / "Local" / "BraveSoftware" / "Brave-Browser" / "User Data" / "Default" / "Bookmarks"
 
     def __init__(self) -> None:
         super().__init__()
         self.title("Bookmarks to Shortcuts")
         self.resizable(False, False)
 
-        self.bookmarks_var = tk.StringVar()
+        self.bookmarks_var = tk.StringVar(value=str(self.DEFAULT_BOOKMARKS_PATH))
         self.output_var = tk.StringVar()
         self.include_full_path_var = tk.BooleanVar(value=False)
         self.duplicate_strategy_var = tk.StringVar(value=DuplicateStrategy.UNIQUE.value)
@@ -136,7 +141,25 @@ class BookmarkExporterGUI(tk.Tk):
         messagebox.showinfo("Export finished", message)
 
 
+def hide_console_window() -> None:
+    """Hide the console window on Windows after the GUI launches."""
+
+    if not sys.platform.startswith("win"):
+        return
+
+    try:
+        import ctypes
+
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 0)
+    except Exception:
+        # Failing to hide the console shouldn't break the GUI.
+        pass
+
+
 def main() -> None:
+    hide_console_window()
     app = BookmarkExporterGUI()
     app.mainloop()
 
