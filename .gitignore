@@ -134,5 +134,9 @@ $RECYCLE.BIN/
 *.bak
 *.old
 
+# Python cache files
+__pycache__/
+*.py[cod]
+
 # Rider / VS solution-level metadata backup
 *.sln.cache
