@@ -1,6 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 
+set "SCRIPT_DIR=%~dp0"
+call "%SCRIPT_DIR%\.venv\Scripts\activate.bat"
+
 if "%~1"=="" goto :usage
 if "%~2"=="" goto :usage
 

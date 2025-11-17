@@ -41,18 +41,36 @@ library that can read Brave bookmark files and export them to Windows `.url` sho
 4. **Review the output.** The CLI mirrors the folder hierarchy from Brave into the
    target directory and reports how many shortcuts were created or skipped.
 
-### Windows helper script
+### Tkinter GUI
 
-Windows users can double-click or run `run_bookmarks_to_shortcuts.bat` to launch the
-CLI. Supply the path to the Brave `Bookmarks` file and the destination directory as
-arguments (additional CLI flags are optional):
+Prefer a graphical interface on Windows? Launch the GUI with:
 
-```bat
-run_bookmarks_to_shortcuts.bat "C:\\Users\\you\\AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data\\Default\\Bookmarks" "D:\\Exported Shortcuts"
+```bash
+python -m bookmarks_to_shortcuts.gui
 ```
 
-Any extra parameters you provide (such as `--include-roots mobile`) are forwarded to the
-Python CLI.
+The window lets you browse for the Bookmarks file and destination folder, toggle which
+roots to include, decide whether to include the full path, and choose the duplicate-file
+strategy. It displays a summary when the export completes.
+
+### Windows helper scripts
+
+Two helper batch files are included for Windows users:
+
+- `run_bookmarks_to_shortcuts.bat` launches the CLI exporter. Supply the path to the Brave
+  `Bookmarks` file and the destination directory as arguments (additional CLI flags are
+  optional):
+
+  ```bat
+  run_bookmarks_to_shortcuts.bat "C:\\Users\\you\\AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data\\Default\\Bookmarks" "D:\\Exported Shortcuts"
+  ```
+
+  Any extra parameters you provide (such as `--include-roots mobile`) are forwarded to the
+  Python CLI.
+
+- `run_bookmarks_to_shortcuts_gui.bat` launches a Tkinter-based GUI if you prefer a point-
+  and-click workflow. The GUI mirrors the CLI options (bookmarks file, destination folder,
+  included roots, duplicate-handling strategy, and the "include full path" toggle).
 
 ## Development
 
