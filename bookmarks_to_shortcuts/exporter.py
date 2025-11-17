@@ -4,10 +4,11 @@ from __future__ import annotations
 import html
 import itertools
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Sequence, Tuple
 
 from .model import BookmarkNode
 
@@ -18,6 +19,24 @@ class DuplicateStrategy(str, Enum):
     UNIQUE = "unique"
     OVERWRITE = "overwrite"
     SKIP = "skip"
+
+
+class StructureMode(str, Enum):
+    PRESERVE = "preserve"
+    COMBINED = "combined"
+
+    @property
+    def label(self) -> str:
+        if self is StructureMode.PRESERVE:
+            return "Preserve bookmark folder structure"
+        return "Combined output"
+
+    @classmethod
+    def from_label(cls, label: str) -> "StructureMode":
+        for mode in cls:
+            if mode.label == label:
+                return mode
+        raise ValueError(f"Unknown structure mode label: {label}")
 
 
 @dataclass
@@ -33,13 +52,18 @@ class BookmarkExporter:
         include_full_path: bool = True,
         duplicate_strategy: DuplicateStrategy = DuplicateStrategy.UNIQUE,
         max_name_length: int = 120,
+        structure_mode: StructureMode = StructureMode.PRESERVE,
     ) -> None:
         self.output_root = Path(output_root)
         self.include_full_path = include_full_path
         self.duplicate_strategy = duplicate_strategy
         self.max_name_length = max_name_length
+        self.structure_mode = structure_mode
 
     def export(self, nodes: Iterable[BookmarkNode]) -> ExportResult:
+        if self.structure_mode == StructureMode.COMBINED:
+            return self._export_combined(nodes)
+
         created: List[Path] = []
         skipped: List[Path] = []
         for node in nodes:
@@ -51,21 +75,34 @@ class BookmarkExporter:
     def export_html(self, nodes: Iterable[BookmarkNode], output_file: Path | str) -> int:
         """Create a standalone HTML document listing all bookmarks."""
 
-        bookmarks = list(self._iter_bookmark_nodes(nodes))
+        if self.structure_mode == StructureMode.COMBINED:
+            bookmarks = self._sorted_bookmarks(nodes)
+            bookmark_count = len(bookmarks)
+            document = self._html_flat_document(bookmarks)
+        else:
+            sections = self._bookmarks_grouped_by_folder(nodes)
+            bookmark_count = sum(len(bookmarks) for _, bookmarks in sections)
+            document = self._html_document(sections)
         output_path = Path(output_file)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(self._html_document(bookmarks), encoding="utf-8")
-        return len(bookmarks)
+        output_path.write_text(document, encoding="utf-8")
+        return bookmark_count
 
     def export_text(self, nodes: Iterable[BookmarkNode], output_file: Path | str) -> int:
         """Create a newline-delimited list of bookmark URLs."""
 
-        bookmarks = list(self._iter_bookmark_nodes(nodes))
+        if self.structure_mode == StructureMode.COMBINED:
+            bookmarks = self._sorted_bookmarks(nodes)
+            bookmark_count = len(bookmarks)
+            document = self._text_flat_document(bookmarks)
+        else:
+            sections = self._bookmarks_grouped_by_folder(nodes)
+            bookmark_count = sum(len(bookmarks) for _, bookmarks in sections)
+            document = self._text_document(sections)
         output_path = Path(output_file)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        urls = [bookmark.url.strip() for bookmark in bookmarks if bookmark.url]
-        output_path.write_text("\n".join(urls), encoding="utf-8")
-        return len(urls)
+        output_path.write_text(document, encoding="utf-8")
+        return bookmark_count
 
     def _export_folder(
         self,
@@ -93,6 +130,21 @@ class BookmarkExporter:
                 content = self._shortcut_contents(child.url or "")
                 final_path.write_text(content, encoding="utf-8")
                 created.append(final_path)
+
+    def _export_combined(self, nodes: Iterable[BookmarkNode]) -> ExportResult:
+        created: List[Path] = []
+        skipped: List[Path] = []
+        self.output_root.mkdir(parents=True, exist_ok=True)
+        for bookmark in self._sorted_bookmarks(nodes):
+            target = self.output_root / f"{self._sanitize(bookmark.name or bookmark.url or 'Bookmark')}.url"
+            final_path = self._handle_duplicates(target)
+            if final_path is None:
+                skipped.append(target)
+                continue
+            content = self._shortcut_contents(bookmark.url or "")
+            final_path.write_text(content, encoding="utf-8")
+            created.append(final_path)
+        return ExportResult(created_files=created, skipped=skipped)
 
     def _handle_duplicates(self, target: Path) -> Path | None:
         if not target.exists():
@@ -140,7 +192,62 @@ class BookmarkExporter:
                     continue
                 yield descendant
 
-    def _html_document(self, bookmarks: List[BookmarkNode]) -> str:
+    def _sorted_bookmarks(self, nodes: Iterable[BookmarkNode]) -> List[BookmarkNode]:
+        return sorted(self._iter_bookmark_nodes(nodes), key=self._bookmark_sort_key)
+
+    def _bookmarks_grouped_by_folder(
+        self, nodes: Iterable[BookmarkNode]
+    ) -> List[Tuple[Tuple[str, ...], List[BookmarkNode]]]:
+        sections: Dict[Tuple[str, ...], List[BookmarkNode]] = defaultdict(list)
+        for bookmark in self._iter_bookmark_nodes(nodes):
+            path = tuple(bookmark.path_components[:-1])
+            sections[path].append(bookmark)
+
+        ordered_sections: List[Tuple[Tuple[str, ...], List[BookmarkNode]]] = []
+        for path in sorted(sections, key=self._section_sort_key):
+            ordered_sections.append((path, sorted(sections[path], key=self._bookmark_sort_key)))
+        return ordered_sections
+
+    @staticmethod
+    def _section_sort_key(path: Sequence[str]) -> Tuple[str, ...]:
+        return tuple(part.casefold() for part in path)
+
+    @staticmethod
+    def _bookmark_sort_key(bookmark: BookmarkNode) -> Tuple[str, str]:
+        name = bookmark.name or bookmark.url or ""
+        return (name.casefold(), (bookmark.url or "").casefold())
+
+    @staticmethod
+    def _section_label(path: Sequence[str]) -> str:
+        if path:
+            return " / ".join(path)
+        return "Bookmarks"
+
+    def _html_document(
+        self, sections: List[Tuple[Tuple[str, ...], List[BookmarkNode]]]
+    ) -> str:
+        lines = [
+            "<!DOCTYPE html>",
+            "<html lang=\"en\">",
+            "<head>",
+            "  <meta charset=\"utf-8\" />",
+            "  <title>Bookmarks Export</title>",
+            "</head>",
+            "<body>",
+        ]
+        for path, bookmarks in sections:
+            section_label = html.escape(self._section_label(path))
+            lines.append(f"  <h2>{section_label}</h2>")
+            lines.append("  <ul>")
+            for bookmark in bookmarks:
+                url = html.escape(bookmark.url or "#", quote=True)
+                label = html.escape(bookmark.name or bookmark.url or "Bookmark")
+                lines.append(f'    <li><a href="{url}">{label}</a></li>')
+            lines.append("  </ul>")
+        lines.extend(["</body>", "</html>"])
+        return "\n".join(lines)
+
+    def _html_flat_document(self, bookmarks: List[BookmarkNode]) -> str:
         lines = [
             "<!DOCTYPE html>",
             "<html lang=\"en\">",
@@ -157,3 +264,20 @@ class BookmarkExporter:
             lines.append(f'    <li><a href="{url}">{label}</a></li>')
         lines.extend(["  </ul>", "</body>", "</html>"])
         return "\n".join(lines)
+
+    def _text_document(
+        self, sections: List[Tuple[Tuple[str, ...], List[BookmarkNode]]]
+    ) -> str:
+        section_blocks: List[str] = []
+        for path, bookmarks in sections:
+            header = self._section_label(path)
+            entries = []
+            for bookmark in bookmarks:
+                name = bookmark.name or bookmark.url or "Bookmark"
+                url = bookmark.url or ""
+                entries.append(f"{name} - {url}".rstrip())
+            section_blocks.append("\n".join([header] + entries))
+        return "\n\n".join(section_blocks)
+
+    def _text_flat_document(self, bookmarks: List[BookmarkNode]) -> str:
+        return "\n".join(bookmark.url or "" for bookmark in bookmarks)
