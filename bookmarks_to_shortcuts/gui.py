@@ -19,6 +19,7 @@ class BookmarkExporterGUI(tk.Tk):
     DEFAULT_BOOKMARKS_PATH = Path(
         os.environ.get("USERPROFILE", str(Path.home()))
     ) / "AppData" / "Local" / "BraveSoftware" / "Brave-Browser" / "User Data" / "Default" / "Bookmarks"
+    DEFAULT_OUTPUT_PATH = Path("F:/Temp")
 
     def __init__(self) -> None:
         super().__init__()
@@ -26,7 +27,7 @@ class BookmarkExporterGUI(tk.Tk):
         self.resizable(False, False)
 
         self.bookmarks_var = tk.StringVar(value=str(self.DEFAULT_BOOKMARKS_PATH))
-        self.output_var = tk.StringVar()
+        self.output_var = tk.StringVar(value=str(self.DEFAULT_OUTPUT_PATH))
         self.include_full_path_var = tk.BooleanVar(value=False)
         self.duplicate_strategy_var = tk.StringVar(value=DuplicateStrategy.UNIQUE.value)
         self.root_vars = {key: tk.BooleanVar(value=True) for key in self.ROOT_KEYS}

@@ -54,6 +54,8 @@ class BookmarkExporter:
         skipped: List[Path],
         base_components: List[str],
     ) -> None:
+        if not self._folder_contains_bookmarks(folder):
+            return
         components = base_components + folder.path_components if self.include_full_path else base_components + [folder.name]
         folder_path = self.output_root.joinpath(*map(self._sanitize, components))
         folder_path.mkdir(parents=True, exist_ok=True)
@@ -98,3 +100,11 @@ class BookmarkExporter:
     @staticmethod
     def _shortcut_contents(url: str) -> str:
         return f"[InternetShortcut]\nURL={url}\n"
+
+    def _folder_contains_bookmarks(self, folder: BookmarkNode) -> bool:
+        for child in folder.children:
+            if not child.is_folder:
+                return True
+            if self._folder_contains_bookmarks(child):
+                return True
+        return False

@@ -29,3 +29,13 @@ def test_duplicate_strategy_unique(tmp_path):
     result = exporter.export([root])
     names = sorted(p.name for p in result.created_files)
     assert names == ["Example _ Docs (2).url", "Example _ Docs.url"]
+
+
+def test_empty_folders_are_skipped(tmp_path):
+    root = BookmarkNode(id="1", name="Bookmarks Bar", type="folder")
+    empty = BookmarkNode(id="2", name="Empty Folder", type="folder")
+    root.add_child(empty)
+    exporter = BookmarkExporter(tmp_path, include_full_path=False)
+    result = exporter.export([root])
+    assert not result.created_files
+    assert not any(tmp_path.iterdir())
