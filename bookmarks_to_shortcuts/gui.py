@@ -8,8 +8,10 @@ from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from typing import Dict, Iterable, List, Optional
 
 from .exporter import BookmarkExporter, DuplicateStrategy, StructureMode
+from .model import BookmarkNode
 from .raw import RawBookmarkFile
 from .tree import BookmarkTreeBuilder
 
@@ -25,7 +27,6 @@ class ExportContext:
 class BookmarkExporterGUI(tk.Tk):
     """Lightweight window that wraps the CLI behavior in Tkinter widgets."""
 
-    ROOT_KEYS = ("bookmark_bar", "other", "synced", "mobile")
     DEFAULT_BOOKMARKS_PATH = Path(
         os.environ.get("USERPROFILE", str(Path.home()))
     ) / "AppData" / "Local" / "BraveSoftware" / "Brave-Browser" / "User Data" / "Default" / "Bookmarks"
@@ -41,10 +42,18 @@ class BookmarkExporterGUI(tk.Tk):
         self.include_full_path_var = tk.BooleanVar(value=False)
         self.duplicate_strategy_var = tk.StringVar(value=DuplicateStrategy.UNIQUE.value)
         self.structure_mode_var = tk.StringVar(value=StructureMode.PRESERVE.label)
-        self.root_vars = {key: tk.BooleanVar(value=True) for key in self.ROOT_KEYS}
         self.status_var = tk.StringVar(value="Select your Bookmarks file and destination.")
 
+        self._tree_roots: List[BookmarkNode] = []
+        self._folder_selection: Dict[str, bool] = {}
+        self._node_lookup: Dict[str, BookmarkNode] = {}
+        self._node_to_item: Dict[str, str] = {}
+        self._item_to_node: Dict[str, str] = {}
+        self._checkbox_images: Dict[str, tk.PhotoImage] = {}
+        self.folder_tree: Optional[ttk.Treeview] = None
+
         self._build_layout()
+        self._load_folder_tree(initial=True)
 
     def _build_layout(self) -> None:
         padding = dict(padx=10, pady=5)
@@ -69,19 +78,9 @@ class BookmarkExporterGUI(tk.Tk):
             column=1, row=3, **padding
         )
 
-        # Include roots section
-        roots_frame = ttk.LabelFrame(frame, text="Roots to export")
-        roots_frame.grid(column=0, row=4, columnspan=2, sticky="we", **padding)
-        for idx, key in enumerate(self.ROOT_KEYS):
-            ttk.Checkbutton(
-                roots_frame,
-                text=key.replace("_", " ").title(),
-                variable=self.root_vars[key],
-            ).grid(column=idx % 2, row=idx // 2, sticky="w", padx=6, pady=3)
-
         # Options
         options_frame = ttk.Frame(frame)
-        options_frame.grid(column=0, row=5, columnspan=2, sticky="we", **padding)
+        options_frame.grid(column=0, row=4, columnspan=2, sticky="we", **padding)
         ttk.Checkbutton(
             options_frame,
             text="Include root name in exported paths",
@@ -110,23 +109,245 @@ class BookmarkExporterGUI(tk.Tk):
         structure_combo.grid(column=0, row=4, sticky="w")
         structure_combo.current(0)
 
+        self._build_folder_explorer(frame, start_row=5, padding=padding)
+
         ttk.Button(frame, text="Export Shortcuts", command=self._export).grid(
-            column=0, row=6, columnspan=2, sticky="we", **padding
+            column=0, row=8, columnspan=2, sticky="we", **padding
         )
         ttk.Button(frame, text="Export as HTML", command=self._export_html).grid(
-            column=0, row=7, columnspan=2, sticky="we", **padding
+            column=0, row=9, columnspan=2, sticky="we", **padding
         )
         ttk.Button(
             frame, text="Export as text document", command=self._export_text
-        ).grid(column=0, row=8, columnspan=2, sticky="we", **padding)
+        ).grid(column=0, row=10, columnspan=2, sticky="we", **padding)
 
         status_label = ttk.Label(frame, textvariable=self.status_var, foreground="#555555")
-        status_label.grid(column=0, row=9, columnspan=2, sticky="w", pady=(0, 5))
+        status_label.grid(column=0, row=11, columnspan=2, sticky="w", pady=(0, 5))
+
+    def _build_folder_explorer(self, parent: ttk.Frame, start_row: int, padding: dict) -> None:
+        if not self._checkbox_images:
+            self._create_checkbox_images()
+
+        explorer = ttk.LabelFrame(parent, text="Folders to include in export")
+        explorer.grid(column=0, row=start_row, columnspan=2, sticky="nsew", **padding)
+        explorer.columnconfigure(0, weight=1)
+        explorer.rowconfigure(0, weight=1)
+
+        tree = ttk.Treeview(explorer, show="tree", selectmode="none", height=10)
+        tree.grid(column=0, row=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(explorer, orient="vertical", command=tree.yview)
+        scrollbar.grid(column=1, row=0, sticky="ns")
+        tree.configure(yscrollcommand=scrollbar.set)
+        tree.tag_configure("placeholder", foreground="#666666")
+        tree.bind("<Button-1>", self._on_tree_click)
+
+        self.folder_tree = tree
+
+        ttk.Button(explorer, text="Refresh folders", command=self._load_folder_tree).grid(
+            column=0, row=1, sticky="w", pady=(6, 0)
+        )
+
+        self._show_tree_placeholder("Load a Brave Bookmarks file to preview folders.")
+
+    def _create_checkbox_images(self) -> None:
+        if self._checkbox_images:
+            return
+
+        def draw_box(mark: str | None) -> tk.PhotoImage:
+            size = 14
+            img = tk.PhotoImage(width=size, height=size)
+            bg = "#ffffff"
+            border = "#4a4a4a"
+            img.put(bg, to=(0, 0, size, size))
+            for idx in range(size):
+                img.put(border, to=(idx, 0))
+                img.put(border, to=(idx, size - 1))
+                img.put(border, to=(0, idx))
+                img.put(border, to=(size - 1, idx))
+            if mark == "check":
+                color = "#1d6f42"
+                points = [
+                    (3, 7),
+                    (4, 8),
+                    (5, 9),
+                    (6, 8),
+                    (7, 7),
+                    (8, 6),
+                    (9, 5),
+                    (10, 4),
+                ]
+                for x, y in points:
+                    img.put(color, to=(x, y))
+                    img.put(color, to=(x, y - 1))
+            elif mark == "mixed":
+                img.put("#1d6f42", to=(3, 6, size - 3, 8))
+            return img
+
+        self._checkbox_images["checked"] = draw_box("check")
+        self._checkbox_images["unchecked"] = draw_box(None)
+        self._checkbox_images["mixed"] = draw_box("mixed")
+
+    def _show_tree_placeholder(self, message: str) -> None:
+        if not self.folder_tree:
+            return
+        self.folder_tree.delete(*self.folder_tree.get_children())
+        self.folder_tree.insert("", "end", text=message, tags=("placeholder",))
+        self._tree_roots = []
+        self._node_lookup.clear()
+        self._node_to_item.clear()
+        self._item_to_node.clear()
+
+    def _on_tree_click(self, event):  # pragma: no cover - GUI-only
+        if not self.folder_tree:
+            return
+        item_id = self.folder_tree.identify_row(event.y)
+        element = self.folder_tree.identify("element", event.x, event.y)
+        if element == "expander":
+            return
+        if not item_id:
+            return
+        if self.folder_tree.tag_has("placeholder", item_id):
+            return
+        node_id = self._item_to_node.get(item_id)
+        if not node_id:
+            return
+        new_value = not self._folder_selection.get(node_id, True)
+        self._apply_folder_state(node_id, new_value)
+        self._refresh_checkbox_icons()
+        return "break"
+
+    def _apply_folder_state(self, node_id: str, value: bool) -> None:
+        node = self._node_lookup.get(node_id)
+        if node is None:
+            return
+        self._folder_selection[node_id] = value
+        for child in node.children:
+            if child.is_folder:
+                self._apply_folder_state(child.id, value)
+
+    def _refresh_checkbox_icons(self) -> None:
+        for node in self._tree_roots:
+            if node.is_folder:
+                self._update_branch_icon(node)
+
+    def _update_branch_icon(self, node: BookmarkNode) -> str:
+        child_states: List[str] = []
+        for child in node.children:
+            if child.is_folder:
+                child_states.append(self._update_branch_icon(child))
+        current_state = "checked" if self._folder_selection.get(node.id, True) else "unchecked"
+        if child_states:
+            if all(state == "checked" for state in child_states) and current_state == "checked":
+                display = "checked"
+            elif all(state == "unchecked" for state in child_states) and current_state == "unchecked":
+                display = "unchecked"
+            else:
+                display = "mixed"
+        else:
+            display = current_state
+        item_id = self._node_to_item.get(node.id)
+        if item_id and self.folder_tree is not None:
+            image = self._checkbox_images.get(display)
+            if image is not None:
+                self.folder_tree.item(item_id, image=image)
+        return display
+
+    def _iter_folder_nodes(self, nodes: Iterable[BookmarkNode]) -> Iterable[BookmarkNode]:
+        for node in nodes:
+            if not node.is_folder:
+                continue
+            yield node
+            yield from self._iter_folder_nodes(node.children)
+
+    def _load_folder_tree(self, initial: bool = False, *, silent: bool = False) -> None:
+        if not self.folder_tree:
+            return
+        bookmarks_path = Path(self.bookmarks_var.get()).expanduser()
+        if not bookmarks_path.exists():
+        self._show_tree_placeholder("Select a valid Bookmarks file to choose folders.")
+            if not (initial or silent):
+                messagebox.showerror("Bookmarks file missing", "Please pick a valid Brave Bookmarks file.")
+            return
+        try:
+            raw = RawBookmarkFile.load(bookmarks_path)
+            tree = BookmarkTreeBuilder(raw)
+            nodes = tree.build()
+        except Exception as exc:  # pragma: no cover - GUI-only
+            self._show_tree_placeholder("Unable to load folders from the selected file.")
+            if not (initial or silent):
+                messagebox.showerror("Failed to load bookmarks", str(exc))
+            return
+
+        self._tree_roots = nodes
+        lookup = {node.id: node for node in self._iter_folder_nodes(nodes)}
+        self._node_lookup = lookup
+        new_selection: Dict[str, bool] = {}
+        for node_id in lookup:
+            new_selection[node_id] = self._folder_selection.get(node_id, True)
+        self._folder_selection = new_selection
+        self._populate_folder_tree(nodes)
+
+    def _populate_folder_tree(self, nodes: List[BookmarkNode]) -> None:
+        if not self.folder_tree:
+            return
+        self.folder_tree.delete(*self.folder_tree.get_children())
+        self._node_to_item.clear()
+        self._item_to_node.clear()
+        inserted = False
+        for node in nodes:
+            if not node.is_folder:
+                continue
+            self._insert_tree_node("", node)
+            inserted = True
+        if not inserted:
+            self._show_tree_placeholder("No folders found in the selected file.")
+        else:
+            self._refresh_checkbox_icons()
+
+    def _insert_tree_node(self, parent_item: str, node: BookmarkNode) -> None:
+        if not self.folder_tree:
+            return
+        display_name = node.name or "(Unnamed folder)"
+        image = self._checkbox_images.get("checked")
+        item_id = self.folder_tree.insert(parent_item, "end", text=display_name, open=True, image=image)
+        self._node_to_item[node.id] = item_id
+        self._item_to_node[item_id] = node.id
+        for child in node.children:
+            if child.is_folder:
+                self._insert_tree_node(item_id, child)
+
+    def _filter_nodes_for_export(self, nodes: List[BookmarkNode]) -> List[BookmarkNode]:
+        filtered: List[BookmarkNode] = []
+        for node in nodes:
+            clone = self._clone_node(node)
+            if clone is not None:
+                filtered.append(clone)
+        return filtered
+
+    def _clone_node(self, node: BookmarkNode) -> Optional[BookmarkNode]:
+        if node.is_folder and not self._folder_selection.get(node.id, True):
+            return None
+        clone = BookmarkNode(id=node.id, name=node.name, type=node.type, url=node.url)
+        for child in node.children:
+            if child.is_folder:
+                child_clone = self._clone_node(child)
+                if child_clone is not None:
+                    clone.add_child(child_clone)
+            else:
+                bookmark = BookmarkNode(
+                    id=child.id,
+                    name=child.name,
+                    type=child.type,
+                    url=child.url,
+                )
+                clone.add_child(bookmark)
+        return clone
 
     def _choose_bookmarks(self) -> None:
         path = filedialog.askopenfilename(title="Select Brave Bookmarks file", filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")])
         if path:
             self.bookmarks_var.set(path)
+            self._load_folder_tree()
 
     def _choose_output(self) -> None:
         path = filedialog.askdirectory(title="Select destination folder")
@@ -200,16 +421,21 @@ class BookmarkExporterGUI(tk.Tk):
                 messagebox.showerror("Invalid destination", str(exc))
                 return None
 
-        include_roots = [name for name, var in self.root_vars.items() if var.get()]
-        include_roots = include_roots or None
-
         try:
             raw = RawBookmarkFile.load(bookmarks_path)
             tree = BookmarkTreeBuilder(raw)
-            nodes = tree.build(include_roots=include_roots)
+            nodes = tree.build()
         except Exception as exc:  # pragma: no cover - GUI-only
             messagebox.showerror("Export failed", str(exc))
             self.status_var.set("Export failed. See error message above.")
+            return None
+
+        filtered_nodes = self._filter_nodes_for_export(nodes)
+        if not filtered_nodes:
+            messagebox.showwarning(
+                "No folders selected",
+                "Please select at least one folder in the folder explorer before exporting.",
+            )
             return None
 
         try:
@@ -230,7 +456,7 @@ class BookmarkExporterGUI(tk.Tk):
         )
         return ExportContext(
             exporter=exporter,
-            nodes=nodes,
+            nodes=filtered_nodes,
             base_output=output_path,
             timestamp_suffix=timestamp_suffix,
         )
