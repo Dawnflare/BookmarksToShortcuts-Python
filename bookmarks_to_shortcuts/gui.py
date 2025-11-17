@@ -133,7 +133,7 @@ class BookmarkExporterGUI(tk.Tk):
         explorer.columnconfigure(0, weight=1)
         explorer.rowconfigure(0, weight=1)
 
-        tree = ttk.Treeview(explorer, show="tree", selectmode="none", height=10)
+        tree = ttk.Treeview(explorer, show="tree", selectmode="none", height=30)
         tree.grid(column=0, row=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(explorer, orient="vertical", command=tree.yview)
         scrollbar.grid(column=1, row=0, sticky="ns")
@@ -201,8 +201,8 @@ class BookmarkExporterGUI(tk.Tk):
         if not self.folder_tree:
             return
         item_id = self.folder_tree.identify_row(event.y)
-        element = self.folder_tree.identify("element", event.x, event.y)
-        if element == "expander":
+        image = self.folder_tree.identify("image", event.x, event.y)
+        if not image:
             return
         if not item_id:
             return
