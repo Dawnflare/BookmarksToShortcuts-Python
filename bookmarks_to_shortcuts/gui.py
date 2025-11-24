@@ -381,7 +381,7 @@ class BookmarkExporterGUI(tk.Tk):
 
         exporter = context.exporter
         nodes = context.nodes
-        html_path = context.base_output / f"bookmarks_{context.timestamp_suffix}.html"
+        html_path = context.base_output / f"{context.timestamp_suffix}_Bookmarks.html"
         try:
             count = exporter.export_html(nodes, html_path)
         except Exception as exc:  # pragma: no cover - GUI-only
@@ -399,7 +399,7 @@ class BookmarkExporterGUI(tk.Tk):
 
         exporter = context.exporter
         nodes = context.nodes
-        text_path = context.base_output / f"bookmarks_{context.timestamp_suffix}.txt"
+        text_path = context.base_output / f"{context.timestamp_suffix}_Bookmarks.txt"
         try:
             count = exporter.export_text(nodes, text_path)
         except Exception as exc:  # pragma: no cover - GUI-only
@@ -474,11 +474,11 @@ class BookmarkExporterGUI(tk.Tk):
     def _next_timestamp_suffix(self, base_path: Path) -> str:
         """Generate a timestamp label unique among exported files."""
 
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
         suffix = timestamp
         counter = 2
         while any(
-            (base_path / f"bookmarks_{suffix}{extension}").exists()
+            (base_path / f"{suffix}_Bookmarks{extension}").exists()
             for extension in (".html", ".txt")
         ):
             suffix = f"{timestamp}_{counter}"
@@ -486,16 +486,16 @@ class BookmarkExporterGUI(tk.Tk):
         return suffix
 
     def _next_destination_folder(self, base_path: Path) -> tuple[Path, str]:
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M")
-        base_name = f"Bookmarks_{timestamp}"
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+        base_name = f"{timestamp}_Bookmarks"
         candidate = base_path / base_name
         suffix = 2
         while candidate.exists():
             candidate = base_path / f"{base_name}_{suffix}"
             suffix += 1
         label = (
-            candidate.name.split("Bookmarks_", 1)[-1]
-            if "Bookmarks_" in candidate.name
+            candidate.name.replace("_Bookmarks", "", 1)
+            if "_Bookmarks" in candidate.name
             else candidate.name
         )
         return candidate, label
