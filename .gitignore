@@ -59,6 +59,7 @@ desktop.ini
 *.orig
 *.bak
 *.old
+Bookmarks_to_shortcuts (shortcut).lnk
 
 # Python cache files
 __pycache__/

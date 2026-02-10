@@ -328,15 +328,15 @@ class BookmarkExporterGUI(tk.Tk):
         return filtered
 
     def _clone_node(self, node: BookmarkNode) -> Optional[BookmarkNode]:
-        if node.is_folder and not self._folder_selection.get(node.id, True):
-            return None
+        folder_selected = not node.is_folder or self._folder_selection.get(node.id, True)
         clone = BookmarkNode(id=node.id, name=node.name, type=node.type, url=node.url)
         for child in node.children:
             if child.is_folder:
                 child_clone = self._clone_node(child)
                 if child_clone is not None:
                     clone.add_child(child_clone)
-            else:
+            elif folder_selected:
+                # Only include direct bookmarks when the folder itself is selected
                 bookmark = BookmarkNode(
                     id=child.id,
                     name=child.name,
@@ -344,6 +344,10 @@ class BookmarkExporterGUI(tk.Tk):
                     url=child.url,
                 )
                 clone.add_child(bookmark)
+        # Include this folder if it's selected, or if it has any surviving children
+        # (i.e., a descendant folder was selected even though this one wasn't)
+        if not folder_selected and not clone.children:
+            return None
         return clone
 
     def _choose_bookmarks(self) -> None:

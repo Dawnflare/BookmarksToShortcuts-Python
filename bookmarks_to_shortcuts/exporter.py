@@ -69,7 +69,23 @@ class BookmarkExporter:
         for node in nodes:
             if not node.is_folder:
                 continue
-            self._export_folder(node, created, skipped, base_components=[])
+            if self.include_full_path:
+                self._export_folder(node, created, skipped, base_components=[])
+            else:
+                # Skip the root folder name — export children directly
+                for child in node.children:
+                    if child.is_folder:
+                        self._export_folder(child, created, skipped, base_components=[])
+                    elif child.url:
+                        self.output_root.mkdir(parents=True, exist_ok=True)
+                        target = self.output_root / f"{self._sanitize(child.name)}.url"
+                        final_path = self._handle_duplicates(target)
+                        if final_path is None:
+                            skipped.append(target)
+                        else:
+                            content = self._shortcut_contents(child.url)
+                            final_path.write_text(content, encoding="utf-8")
+                            created.append(final_path)
         return ExportResult(created_files=created, skipped=skipped)
 
     def export_html(self, nodes: Iterable[BookmarkNode], output_file: Path | str) -> int:
