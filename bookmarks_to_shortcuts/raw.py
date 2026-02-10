@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
@@ -23,3 +25,16 @@ class RawBookmarkFile:
 
     def roots(self) -> Dict[str, Any]:
         return self.data.get("roots", {})
+
+    def backup(self) -> Path:
+        """Create a timestamped backup of the bookmarks file."""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = self.source_path.with_suffix(f".{timestamp}.bak")
+        shutil.copy2(self.source_path, backup_path)
+        return backup_path
+
+    def save(self) -> None:
+        """Write the current data back to the source file."""
+        with self.source_path.open("w", encoding="utf-8") as fh:
+            json.dump(self.data, fh, indent=3)
+

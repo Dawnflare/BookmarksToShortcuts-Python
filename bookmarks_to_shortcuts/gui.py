@@ -1,6 +1,7 @@
 """Simple Tkinter GUI for exporting Brave bookmarks on Windows."""
 from __future__ import annotations
 
+
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -11,6 +12,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, Iterable, List, Optional
 
+from .deleter import BookmarkDeleter
 from .exporter import BookmarkExporter, DuplicateStrategy, StructureMode
 from .model import BookmarkNode
 from .raw import RawBookmarkFile
@@ -46,6 +48,7 @@ class BookmarkExporterGUI(tk.Tk):
         self.export_shortcuts_var = tk.BooleanVar(value=True)
         self.export_html_var = tk.BooleanVar(value=True)
         self.export_text_var = tk.BooleanVar(value=True)
+        self.delete_after_export_var = tk.BooleanVar(value=True)
         self.status_var = tk.StringVar(value="Select your Bookmarks file and destination.")
 
         self._tree_roots: List[BookmarkNode] = []
@@ -91,8 +94,13 @@ class BookmarkExporterGUI(tk.Tk):
             text="Include root name in exported paths",
             variable=self.include_full_path_var,
         ).grid(column=0, row=0, columnspan=4, sticky="w")
+        ttk.Checkbutton(
+            options_frame,
+            text="Delete exported bookmarks from Brave after export",
+            variable=self.delete_after_export_var,
+        ).grid(column=0, row=1, columnspan=4, sticky="w")
 
-        ttk.Label(options_frame, text="Duplicate handling:").grid(column=0, row=1, sticky="w", pady=(10, 0))
+        ttk.Label(options_frame, text="Duplicate handling:").grid(column=0, row=2, sticky="w", pady=(10, 0))
         duplicate_combo = ttk.Combobox(
             options_frame,
             textvariable=self.duplicate_strategy_var,
@@ -100,10 +108,10 @@ class BookmarkExporterGUI(tk.Tk):
             state="readonly",
             width=12,
         )
-        duplicate_combo.grid(column=0, row=2, sticky="w")
+        duplicate_combo.grid(column=0, row=3, sticky="w")
         duplicate_combo.current(0)
 
-        ttk.Label(options_frame, text="Bookmark layout:").grid(column=2, row=1, sticky="w", padx=(20, 0), pady=(10, 0))
+        ttk.Label(options_frame, text="Bookmark layout:").grid(column=2, row=2, sticky="w", padx=(20, 0), pady=(10, 0))
         structure_combo = ttk.Combobox(
             options_frame,
             textvariable=self.structure_mode_var,
@@ -111,7 +119,7 @@ class BookmarkExporterGUI(tk.Tk):
             state="readonly",
             width=32,
         )
-        structure_combo.grid(column=2, row=2, sticky="w", padx=(20, 0))
+        structure_combo.grid(column=2, row=3, sticky="w", padx=(20, 0))
         structure_combo.current(0)
 
         self._build_folder_explorer(frame, start_row=5, padding=padding)
@@ -381,6 +389,17 @@ class BookmarkExporterGUI(tk.Tk):
             return None
         return clone
 
+    def _collect_url_ids(self, nodes: List[BookmarkNode]) -> set:
+        """Collect the IDs of all URL bookmarks in the filtered node tree."""
+        ids: set = set()
+        for node in nodes:
+            if not node.is_folder:
+                ids.add(node.id)
+            for desc in node.iter_descendants():
+                if not desc.is_folder:
+                    ids.add(desc.id)
+        return ids
+
     def _set_status_text(self, text: str) -> None:
         if self.status_text is None:
             return
@@ -455,8 +474,24 @@ class BookmarkExporterGUI(tk.Tk):
         if errors:
             messagebox.showerror("Export failed", "\n".join(errors))
             self._set_status_text("Export failed. See error message above.")
-        else:
-            self._set_status_text("\n".join(messages))
+            return
+
+        # Delete exported bookmarks from Brave if requested
+        if self.delete_after_export_var.get():
+            try:
+                exported_ids = self._collect_url_ids(nodes)
+                bookmarks_path = Path(self.bookmarks_var.get()).expanduser()
+                raw = RawBookmarkFile.load(bookmarks_path)
+                raw.backup()
+                deleter = BookmarkDeleter(raw)
+                removed = deleter.delete(exported_ids)
+                raw.save()
+                messages.append(f"Deleted {removed} bookmarks from Brave")
+                self._load_folder_tree(silent=True)
+            except Exception as exc:
+                messages.append(f"Delete failed: {exc}")
+
+        self._set_status_text("\n".join(messages))
 
     def _export(self) -> None:
         context = self._prepare_export_context(create_destination=True)
