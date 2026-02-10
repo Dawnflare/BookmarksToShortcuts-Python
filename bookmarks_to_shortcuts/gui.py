@@ -44,8 +44,8 @@ class BookmarkExporterGUI(tk.Tk):
         self.duplicate_strategy_var = tk.StringVar(value=DuplicateStrategy.UNIQUE.value)
         self.structure_mode_var = tk.StringVar(value=StructureMode.PRESERVE.label)
         self.export_shortcuts_var = tk.BooleanVar(value=True)
-        self.export_html_var = tk.BooleanVar(value=False)
-        self.export_text_var = tk.BooleanVar(value=False)
+        self.export_html_var = tk.BooleanVar(value=True)
+        self.export_text_var = tk.BooleanVar(value=True)
         self.status_var = tk.StringVar(value="Select your Bookmarks file and destination.")
 
         self._tree_roots: List[BookmarkNode] = []
@@ -55,6 +55,7 @@ class BookmarkExporterGUI(tk.Tk):
         self._item_to_node: Dict[str, str] = {}
         self._checkbox_images: Dict[str, tk.PhotoImage] = {}
         self.folder_tree: Optional[ttk.Treeview] = None
+        self.status_text: Optional[tk.Text] = None
 
         self._build_layout()
         self._load_folder_tree(initial=True)
@@ -89,7 +90,7 @@ class BookmarkExporterGUI(tk.Tk):
             options_frame,
             text="Include root name in exported paths",
             variable=self.include_full_path_var,
-        ).grid(column=0, row=0, sticky="w")
+        ).grid(column=0, row=0, columnspan=4, sticky="w")
 
         ttk.Label(options_frame, text="Duplicate handling:").grid(column=0, row=1, sticky="w", pady=(10, 0))
         duplicate_combo = ttk.Combobox(
@@ -102,7 +103,7 @@ class BookmarkExporterGUI(tk.Tk):
         duplicate_combo.grid(column=0, row=2, sticky="w")
         duplicate_combo.current(0)
 
-        ttk.Label(options_frame, text="Bookmark layout:").grid(column=0, row=3, sticky="w", pady=(10, 0))
+        ttk.Label(options_frame, text="Bookmark layout:").grid(column=2, row=1, sticky="w", padx=(20, 0), pady=(10, 0))
         structure_combo = ttk.Combobox(
             options_frame,
             textvariable=self.structure_mode_var,
@@ -110,7 +111,7 @@ class BookmarkExporterGUI(tk.Tk):
             state="readonly",
             width=32,
         )
-        structure_combo.grid(column=0, row=4, sticky="w")
+        structure_combo.grid(column=2, row=2, sticky="w", padx=(20, 0))
         structure_combo.current(0)
 
         self._build_folder_explorer(frame, start_row=5, padding=padding)
@@ -131,8 +132,10 @@ class BookmarkExporterGUI(tk.Tk):
             column=0, row=9, columnspan=2, sticky="we", **padding
         )
 
-        status_label = ttk.Label(frame, textvariable=self.status_var, foreground="#555555")
-        status_label.grid(column=0, row=10, columnspan=2, sticky="w", pady=(0, 5))
+        self.status_text = tk.Text(frame, height=3, wrap="word", state="disabled",
+                                    relief="sunken", borderwidth=1,
+                                    font=("TkDefaultFont", 9), foreground="#555555")
+        self.status_text.grid(column=0, row=10, columnspan=2, sticky="we", padx=10, pady=(0, 5))
 
     def _build_folder_explorer(self, parent: ttk.Frame, start_row: int, padding: dict) -> None:
         if not self._checkbox_images:
@@ -153,8 +156,16 @@ class BookmarkExporterGUI(tk.Tk):
 
         self.folder_tree = tree
 
-        ttk.Button(explorer, text="Refresh folders", command=self._load_folder_tree).grid(
-            column=0, row=1, sticky="w", pady=(6, 0)
+        btn_frame = ttk.Frame(explorer)
+        btn_frame.grid(column=0, row=1, sticky="w", pady=(6, 0))
+        ttk.Button(btn_frame, text="Refresh folders", command=self._load_folder_tree).grid(
+            column=0, row=0, padx=(0, 4)
+        )
+        ttk.Button(btn_frame, text="Select all", command=self._select_all_folders).grid(
+            column=1, row=0, padx=(0, 4)
+        )
+        ttk.Button(btn_frame, text="Deselect all", command=self._deselect_all_folders).grid(
+            column=2, row=0
         )
 
         self._show_tree_placeholder("Load a Brave Bookmarks file to preview folders.")
@@ -207,6 +218,16 @@ class BookmarkExporterGUI(tk.Tk):
         self._node_to_item.clear()
         self._item_to_node.clear()
 
+    def _select_all_folders(self) -> None:
+        for node_id in self._folder_selection:
+            self._folder_selection[node_id] = True
+        self._refresh_checkbox_icons()
+
+    def _deselect_all_folders(self) -> None:
+        for node_id in self._folder_selection:
+            self._folder_selection[node_id] = False
+        self._refresh_checkbox_icons()
+
     def _on_tree_click(self, event):  # pragma: no cover - GUI-only
         if not self.folder_tree:
             return
@@ -221,7 +242,7 @@ class BookmarkExporterGUI(tk.Tk):
         node_id = self._item_to_node.get(item_id)
         if not node_id:
             return
-        new_value = not self._folder_selection.get(node_id, True)
+        new_value = not self._folder_selection.get(node_id, False)
         self._apply_folder_state(node_id, new_value)
         self._refresh_checkbox_icons()
         return "break"
@@ -245,7 +266,7 @@ class BookmarkExporterGUI(tk.Tk):
         for child in node.children:
             if child.is_folder:
                 child_states.append(self._update_branch_icon(child))
-        current_state = "checked" if self._folder_selection.get(node.id, True) else "unchecked"
+        current_state = "checked" if self._folder_selection.get(node.id, False) else "unchecked"
         if child_states:
             if all(state == "checked" for state in child_states) and current_state == "checked":
                 display = "checked"
@@ -296,7 +317,7 @@ class BookmarkExporterGUI(tk.Tk):
         self._node_lookup = lookup
         new_selection: Dict[str, bool] = {}
         for node_id in lookup:
-            new_selection[node_id] = self._folder_selection.get(node_id, True)
+            new_selection[node_id] = self._folder_selection.get(node_id, False)
         self._folder_selection = new_selection
         self._populate_folder_tree(nodes)
 
@@ -321,7 +342,7 @@ class BookmarkExporterGUI(tk.Tk):
         if not self.folder_tree:
             return
         display_name = node.name or "(Unnamed folder)"
-        image = self._checkbox_images.get("checked")
+        image = self._checkbox_images.get("unchecked")
         item_id = self.folder_tree.insert(parent_item, "end", text=display_name, open=True, image=image)
         self._node_to_item[node.id] = item_id
         self._item_to_node[item_id] = node.id
@@ -338,7 +359,7 @@ class BookmarkExporterGUI(tk.Tk):
         return filtered
 
     def _clone_node(self, node: BookmarkNode) -> Optional[BookmarkNode]:
-        folder_selected = not node.is_folder or self._folder_selection.get(node.id, True)
+        folder_selected = not node.is_folder or self._folder_selection.get(node.id, False)
         clone = BookmarkNode(id=node.id, name=node.name, type=node.type, url=node.url)
         for child in node.children:
             if child.is_folder:
@@ -359,6 +380,14 @@ class BookmarkExporterGUI(tk.Tk):
         if not folder_selected and not clone.children:
             return None
         return clone
+
+    def _set_status_text(self, text: str) -> None:
+        if self.status_text is None:
+            return
+        self.status_text.configure(state="normal")
+        self.status_text.delete("1.0", "end")
+        self.status_text.insert("1.0", text)
+        self.status_text.configure(state="disabled")
 
     def _choose_bookmarks(self) -> None:
         path = filedialog.askopenfilename(title="Select Brave Bookmarks file", filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")])
@@ -425,9 +454,9 @@ class BookmarkExporterGUI(tk.Tk):
 
         if errors:
             messagebox.showerror("Export failed", "\n".join(errors))
-            self.status_var.set("Export failed. See error message above.")
+            self._set_status_text("Export failed. See error message above.")
         else:
-            self.status_var.set("; ".join(messages))
+            self._set_status_text("\n".join(messages))
 
     def _export(self) -> None:
         context = self._prepare_export_context(create_destination=True)
@@ -582,9 +611,7 @@ def hide_console_window() -> None:
     try:
         import ctypes
 
-        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-        if hwnd:
-            ctypes.windll.user32.ShowWindow(hwnd, 0)
+        ctypes.windll.kernel32.FreeConsole()
     except Exception:
         # Failing to hide the console shouldn't break the GUI.
         pass
