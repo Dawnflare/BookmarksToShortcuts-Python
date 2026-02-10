@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -42,6 +43,9 @@ class BookmarkExporterGUI(tk.Tk):
         self.include_full_path_var = tk.BooleanVar(value=False)
         self.duplicate_strategy_var = tk.StringVar(value=DuplicateStrategy.UNIQUE.value)
         self.structure_mode_var = tk.StringVar(value=StructureMode.PRESERVE.label)
+        self.export_shortcuts_var = tk.BooleanVar(value=True)
+        self.export_html_var = tk.BooleanVar(value=False)
+        self.export_text_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Select your Bookmarks file and destination.")
 
         self._tree_roots: List[BookmarkNode] = []
@@ -111,18 +115,24 @@ class BookmarkExporterGUI(tk.Tk):
 
         self._build_folder_explorer(frame, start_row=5, padding=padding)
 
-        ttk.Button(frame, text="Export Shortcuts", command=self._export).grid(
-            column=0, row=8, columnspan=2, sticky="we", **padding
-        )
-        ttk.Button(frame, text="Export as HTML", command=self._export_html).grid(
+        export_frame = ttk.LabelFrame(frame, text="Export formats")
+        export_frame.grid(column=0, row=8, columnspan=2, sticky="we", **padding)
+        ttk.Checkbutton(
+            export_frame, text="Export Shortcuts", variable=self.export_shortcuts_var
+        ).grid(column=0, row=0, sticky="w", padx=5, pady=2)
+        ttk.Checkbutton(
+            export_frame, text="Export as HTML", variable=self.export_html_var
+        ).grid(column=0, row=1, sticky="w", padx=5, pady=2)
+        ttk.Checkbutton(
+            export_frame, text="Export as text document", variable=self.export_text_var
+        ).grid(column=0, row=2, sticky="w", padx=5, pady=2)
+
+        ttk.Button(frame, text="Export", command=self._export_selected).grid(
             column=0, row=9, columnspan=2, sticky="we", **padding
         )
-        ttk.Button(
-            frame, text="Export as text document", command=self._export_text
-        ).grid(column=0, row=10, columnspan=2, sticky="we", **padding)
 
         status_label = ttk.Label(frame, textvariable=self.status_var, foreground="#555555")
-        status_label.grid(column=0, row=11, columnspan=2, sticky="w", pady=(0, 5))
+        status_label.grid(column=0, row=10, columnspan=2, sticky="w", pady=(0, 5))
 
     def _build_folder_explorer(self, parent: ttk.Frame, start_row: int, padding: dict) -> None:
         if not self._checkbox_images:
@@ -360,6 +370,64 @@ class BookmarkExporterGUI(tk.Tk):
         path = filedialog.askdirectory(title="Select destination folder")
         if path:
             self.output_var.set(path)
+
+    def _export_selected(self) -> None:
+        do_shortcuts = self.export_shortcuts_var.get()
+        do_html = self.export_html_var.get()
+        do_text = self.export_text_var.get()
+
+        if not (do_shortcuts or do_html or do_text):
+            messagebox.showwarning(
+                "No export format selected",
+                "Please select at least one export format before exporting.",
+            )
+            return
+
+        context = self._prepare_export_context(create_destination=do_shortcuts)
+        if context is None:
+            return
+
+        exporter = context.exporter
+        nodes = context.nodes
+        messages: List[str] = []
+        errors: List[str] = []
+
+        def run_shortcuts():
+            result = exporter.export(nodes)
+            return f"Created {len(result.created_files)} shortcuts; skipped {len(result.skipped)}"
+
+        def run_html():
+            html_path = context.base_output / f"{context.timestamp_suffix}_Bookmarks.html"
+            count = exporter.export_html(nodes, html_path)
+            return f"Exported {count} bookmarks to {html_path.name}"
+
+        def run_text():
+            text_path = context.base_output / f"{context.timestamp_suffix}_Bookmarks.txt"
+            count = exporter.export_text(nodes, text_path)
+            return f"Exported {count} bookmarks to {text_path.name}"
+
+        tasks = []
+        if do_shortcuts:
+            tasks.append(("Shortcuts", run_shortcuts))
+        if do_html:
+            tasks.append(("HTML", run_html))
+        if do_text:
+            tasks.append(("Text", run_text))
+
+        with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+            futures = {pool.submit(fn): label for label, fn in tasks}
+            for future in as_completed(futures):
+                label = futures[future]
+                try:
+                    messages.append(future.result())
+                except Exception as exc:
+                    errors.append(f"{label}: {exc}")
+
+        if errors:
+            messagebox.showerror("Export failed", "\n".join(errors))
+            self.status_var.set("Export failed. See error message above.")
+        else:
+            self.status_var.set("; ".join(messages))
 
     def _export(self) -> None:
         context = self._prepare_export_context(create_destination=True)
