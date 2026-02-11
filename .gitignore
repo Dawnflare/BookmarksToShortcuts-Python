@@ -60,6 +60,7 @@ desktop.ini
 *.bak
 *.old
 Bookmarks_to_shortcuts (shortcut).lnk
+config.json
 
 # Python cache files
 __pycache__/

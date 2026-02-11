@@ -13,6 +13,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, Iterable, List, Optional
 
+from .config import AppConfig
 from .deleter import BookmarkDeleter
 from .exporter import BookmarkExporter, DuplicateStrategy, StructureMode
 from .model import BookmarkNode
@@ -41,8 +42,13 @@ class BookmarkExporterGUI(tk.Tk):
         self.title("Bookmarks to Shortcuts")
         self.resizable(False, False)
 
-        self.bookmarks_var = tk.StringVar(value=str(self.DEFAULT_BOOKMARKS_PATH))
-        self.output_var = tk.StringVar(value=str(self.DEFAULT_OUTPUT_PATH))
+        self._config = AppConfig.load()
+
+        bookmarks_path = self._config.bookmarks_path or str(self.DEFAULT_BOOKMARKS_PATH)
+        output_path = self._config.output_path or str(self.DEFAULT_OUTPUT_PATH)
+
+        self.bookmarks_var = tk.StringVar(value=bookmarks_path)
+        self.output_var = tk.StringVar(value=output_path)
         self.include_full_path_var = tk.BooleanVar(value=False)
         self.duplicate_strategy_var = tk.StringVar(value=DuplicateStrategy.UNIQUE.value)
         self.structure_mode_var = tk.StringVar(value=StructureMode.PRESERVE.label)
@@ -446,12 +452,20 @@ class BookmarkExporterGUI(tk.Tk):
         path = filedialog.askopenfilename(title="Select Brave Bookmarks file", filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")])
         if path:
             self.bookmarks_var.set(path)
+            self._save_config()
             self._load_folder_tree()
 
     def _choose_output(self) -> None:
         path = filedialog.askdirectory(title="Select destination folder")
         if path:
             self.output_var.set(path)
+            self._save_config()
+
+    def _save_config(self) -> None:
+        """Persist the current bookmarks and output paths to the config file."""
+        self._config.bookmarks_path = self.bookmarks_var.get()
+        self._config.output_path = self.output_var.get()
+        self._config.save()
 
     def _export_selected(self) -> None:
         do_shortcuts = self.export_shortcuts_var.get()
