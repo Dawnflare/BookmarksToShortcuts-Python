@@ -421,9 +421,14 @@ class BookmarkExporterGUI(tk.Tk):
     def _is_brave_running(self) -> bool:
         """Check if Brave browser is currently running."""
         try:
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = 0
             result = subprocess.run(
                 ["tasklist", "/FI", "IMAGENAME eq brave.exe", "/NH"],
                 capture_output=True, text=True, timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                startupinfo=startupinfo,
             )
             return "brave.exe" in result.stdout.lower()
         except Exception:
