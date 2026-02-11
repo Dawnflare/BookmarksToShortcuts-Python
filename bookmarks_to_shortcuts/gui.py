@@ -3,6 +3,7 @@ from __future__ import annotations
 
 
 import os
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -94,11 +95,21 @@ class BookmarkExporterGUI(tk.Tk):
             text="Include root name in exported paths",
             variable=self.include_full_path_var,
         ).grid(column=0, row=0, columnspan=4, sticky="w")
+
+        delete_toggle_frame = ttk.Frame(options_frame)
+        delete_toggle_frame.grid(column=0, row=1, columnspan=4, sticky="w")
         ttk.Checkbutton(
-            options_frame,
+            delete_toggle_frame,
             text="Delete exported bookmarks from Brave after export",
             variable=self.delete_after_export_var,
-        ).grid(column=0, row=1, columnspan=4, sticky="w")
+            command=self._update_delete_warning,
+        ).grid(column=0, row=0, sticky="w")
+        self._delete_warning_label = ttk.Label(
+            delete_toggle_frame,
+            text="  ⚠ Brave must be closed before exporting",
+            foreground="#cc6600",
+        )
+        self._delete_warning_label.grid(column=1, row=0, sticky="w")
 
         ttk.Label(options_frame, text="Duplicate handling:").grid(column=0, row=2, sticky="w", pady=(10, 0))
         duplicate_combo = ttk.Combobox(
@@ -140,7 +151,7 @@ class BookmarkExporterGUI(tk.Tk):
             column=0, row=9, columnspan=2, sticky="we", **padding
         )
 
-        self.status_text = tk.Text(frame, height=3, wrap="word", state="disabled",
+        self.status_text = tk.Text(frame, height=4, wrap="word", state="disabled",
                                     relief="sunken", borderwidth=1,
                                     font=("TkDefaultFont", 9), foreground="#555555")
         self.status_text.grid(column=0, row=10, columnspan=2, sticky="we", padx=10, pady=(0, 5))
@@ -400,6 +411,24 @@ class BookmarkExporterGUI(tk.Tk):
                     ids.add(desc.id)
         return ids
 
+    def _update_delete_warning(self) -> None:
+        """Show or hide the Brave warning label based on toggle state."""
+        if self.delete_after_export_var.get():
+            self._delete_warning_label.grid()
+        else:
+            self._delete_warning_label.grid_remove()
+
+    def _is_brave_running(self) -> bool:
+        """Check if Brave browser is currently running."""
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FI", "IMAGENAME eq brave.exe", "/NH"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return "brave.exe" in result.stdout.lower()
+        except Exception:
+            return False
+
     def _set_status_text(self, text: str) -> None:
         if self.status_text is None:
             return
@@ -428,6 +457,16 @@ class BookmarkExporterGUI(tk.Tk):
             messagebox.showwarning(
                 "No export format selected",
                 "Please select at least one export format before exporting.",
+            )
+            return
+
+        # Check if Brave is running when delete is requested
+        if self.delete_after_export_var.get() and self._is_brave_running():
+            messagebox.showerror(
+                "Brave is running",
+                "Brave must be closed before exporting with deletion enabled.\n\n"
+                "Please close Brave and try again, or disable the "
+                "\"Delete exported bookmarks\" option.",
             )
             return
 
