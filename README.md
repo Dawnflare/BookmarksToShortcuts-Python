@@ -20,7 +20,7 @@ A powerful, user-friendly tool to export your Brave bookmarks as Windows `.url` 
 ### 🧹 Clean Up & Safety
 - **Delete After Export**: Optionally remove exported bookmarks from Brave automatically.
     - **Safety First**: Checks if Brave is running (and blocks execution if it is) to prevent database corruption.
-    - **Auto-Backup**: Creates a timestamped `.bak` copy of your Bookmarks file before any deletion.
+    - **Optional Backup**: Choose whether to create a timestamped `.bak` copy of your Bookmarks file before deletion.
     - **Smart Pruning**: Automatically removes empty folders left behind after deletion.
 
 ## Getting Started
@@ -31,8 +31,11 @@ A powerful, user-friendly tool to export your Brave bookmarks as Windows `.url` 
 
 ### Running the Application
 
-1. **Launch the GUI**:
-   Double-click `run_bookmarks_to_shortcuts_gui.bat` to verify your environment and launch the application.
+1. **Setup the Environment**:
+   Double-click `setup.bat`. This will create a virtual environment and install any necessary development tools (like `pytest` for testing).
+
+2. **Launch the GUI**:
+   Double-click `run_bookmarks_to_shortcuts_gui.bat`.
 
    Or run from the command line:
    ```bash
