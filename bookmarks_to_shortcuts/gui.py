@@ -58,6 +58,7 @@ class BookmarkExporterGUI(tk.Tk):
         self.export_html_var = tk.BooleanVar(value=True)
         self.export_text_var = tk.BooleanVar(value=True)
         self.delete_after_export_var = tk.BooleanVar(value=True)
+        self.backup_before_delete_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Select your Bookmarks file and destination.")
 
         self._tree_roots: List[BookmarkNode] = []
@@ -126,6 +127,13 @@ class BookmarkExporterGUI(tk.Tk):
             style="Warning.TLabel",
         )
         self._delete_warning_label.grid(column=1, row=0, sticky="w")
+
+        self._backup_checkbox = ttk.Checkbutton(
+            delete_toggle_frame,
+            text="Back up Bookmarks file before deletion",
+            variable=self.backup_before_delete_var,
+        )
+        self._backup_checkbox.grid(column=0, row=1, sticky="w", padx=(20, 0))
 
         ttk.Label(options_frame, text="Duplicate handling:").grid(column=0, row=2, sticky="w", pady=(10, 0))
         duplicate_combo = ttk.Combobox(
@@ -440,11 +448,13 @@ class BookmarkExporterGUI(tk.Tk):
         return ids
 
     def _update_delete_warning(self) -> None:
-        """Show or hide the Brave warning label based on toggle state."""
+        """Show or hide the Brave warning label and backup option based on toggle state."""
         if self.delete_after_export_var.get():
             self._delete_warning_label.grid()
+            self._backup_checkbox.grid()
         else:
             self._delete_warning_label.grid_remove()
+            self._backup_checkbox.grid_remove()
 
     def _is_brave_running(self) -> bool:
         """Check if Brave browser is currently running."""
@@ -591,7 +601,8 @@ class BookmarkExporterGUI(tk.Tk):
                 exported_ids = self._collect_url_ids(nodes)
                 bookmarks_path = Path(self.bookmarks_var.get()).expanduser()
                 raw = RawBookmarkFile.load(bookmarks_path)
-                raw.backup()
+                if self.backup_before_delete_var.get():
+                    raw.backup()
                 deleter = BookmarkDeleter(raw)
                 removed = deleter.delete(exported_ids)
                 raw.save()
