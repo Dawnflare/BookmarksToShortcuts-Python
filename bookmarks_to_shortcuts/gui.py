@@ -18,6 +18,7 @@ from .deleter import BookmarkDeleter
 from .exporter import BookmarkExporter, DuplicateStrategy, StructureMode
 from .model import BookmarkNode
 from .raw import RawBookmarkFile
+from .theme import THEMES, apply_theme
 from .tree import BookmarkTreeBuilder
 
 
@@ -43,6 +44,7 @@ class BookmarkExporterGUI(tk.Tk):
         self.resizable(False, False)
 
         self._config = AppConfig.load()
+        self._current_theme = self._config.theme if self._config.theme in THEMES else "dark"
 
         bookmarks_path = self._config.bookmarks_path or str(self.DEFAULT_BOOKMARKS_PATH)
         output_path = self._config.output_path or str(self.DEFAULT_OUTPUT_PATH)
@@ -68,6 +70,14 @@ class BookmarkExporterGUI(tk.Tk):
         self.status_text: Optional[tk.Text] = None
 
         self._build_layout()
+        apply_theme(self, THEMES[self._current_theme])
+        # Apply theme to non-ttk widgets
+        colors = THEMES[self._current_theme]
+        if self.status_text is not None:
+            self.status_text.configure(
+                bg=colors.entry_bg, fg=colors.status_fg,
+                insertbackground=colors.fg,
+            )
         self._load_folder_tree(initial=True)
 
     def _build_layout(self) -> None:
@@ -113,7 +123,7 @@ class BookmarkExporterGUI(tk.Tk):
         self._delete_warning_label = ttk.Label(
             delete_toggle_frame,
             text="  ⚠ Brave must be closed before exporting",
-            foreground="#cc6600",
+            style="Warning.TLabel",
         )
         self._delete_warning_label.grid(column=1, row=0, sticky="w")
 
@@ -153,13 +163,23 @@ class BookmarkExporterGUI(tk.Tk):
             export_frame, text="Export as text document", variable=self.export_text_var
         ).grid(column=0, row=2, sticky="w", padx=5, pady=2)
 
-        ttk.Button(frame, text="Export", command=self._export_selected).grid(
-            column=0, row=9, columnspan=2, sticky="we", **padding
+        bottom_frame = ttk.Frame(frame)
+        bottom_frame.grid(column=0, row=9, columnspan=2, sticky="we", **padding)
+        bottom_frame.columnconfigure(0, weight=1)
+
+        ttk.Button(bottom_frame, text="Export", command=self._export_selected).grid(
+            column=0, row=0, sticky="we"
         )
+
+        theme_label = "☀ Light" if self._current_theme == "dark" else "🌙 Dark"
+        self._theme_button = ttk.Button(
+            bottom_frame, text=theme_label, command=self._toggle_theme, width=9
+        )
+        self._theme_button.grid(column=1, row=0, sticky="e", padx=(8, 0))
 
         self.status_text = tk.Text(frame, height=4, wrap="word", state="disabled",
                                     relief="sunken", borderwidth=1,
-                                    font=("TkDefaultFont", 9), foreground="#555555")
+                                    font=("TkDefaultFont", 9))
         self.status_text.grid(column=0, row=10, columnspan=2, sticky="we", padx=10, pady=(0, 5))
 
     def _build_folder_explorer(self, parent: ttk.Frame, start_row: int, padding: dict) -> None:
@@ -176,7 +196,7 @@ class BookmarkExporterGUI(tk.Tk):
         scrollbar = ttk.Scrollbar(explorer, orient="vertical", command=tree.yview)
         scrollbar.grid(column=1, row=0, sticky="ns")
         tree.configure(yscrollcommand=scrollbar.set)
-        tree.tag_configure("placeholder", foreground="#666666")
+        tree.tag_configure("placeholder", foreground="#888888")
         tree.bind("<Button-1>", self._on_tree_click)
 
         self.folder_tree = tree
@@ -196,14 +216,16 @@ class BookmarkExporterGUI(tk.Tk):
         self._show_tree_placeholder("Load a Brave Bookmarks file to preview folders.")
 
     def _create_checkbox_images(self) -> None:
-        if self._checkbox_images:
-            return
+        # Clear old images so they are regenerated with current theme colors
+        self._checkbox_images.clear()
+
+        colors = THEMES[self._current_theme]
 
         def draw_box(mark: str | None) -> tk.PhotoImage:
             size = 14
             img = tk.PhotoImage(width=size, height=size)
-            bg = "#ffffff"
-            border = "#4a4a4a"
+            bg = colors.checkbox_bg
+            border = colors.checkbox_border
             img.put(bg, to=(0, 0, size, size))
             for idx in range(size):
                 img.put(border, to=(idx, 0))
@@ -211,7 +233,7 @@ class BookmarkExporterGUI(tk.Tk):
                 img.put(border, to=(0, idx))
                 img.put(border, to=(size - 1, idx))
             if mark == "check":
-                color = "#1d6f42"
+                color = colors.checkbox_check
                 points = [
                     (3, 7),
                     (4, 8),
@@ -226,7 +248,7 @@ class BookmarkExporterGUI(tk.Tk):
                     img.put(color, to=(x, y))
                     img.put(color, to=(x, y - 1))
             elif mark == "mixed":
-                img.put("#1d6f42", to=(3, 6, size - 3, 8))
+                img.put(colors.checkbox_check, to=(3, 6, size - 3, 8))
             return img
 
         self._checkbox_images["checked"] = draw_box("check")
@@ -462,10 +484,39 @@ class BookmarkExporterGUI(tk.Tk):
             self._save_config()
 
     def _save_config(self) -> None:
-        """Persist the current bookmarks and output paths to the config file."""
+        """Persist the current paths and theme to the config file."""
         self._config.bookmarks_path = self.bookmarks_var.get()
         self._config.output_path = self.output_var.get()
+        self._config.theme = self._current_theme
         self._config.save()
+
+    def _toggle_theme(self) -> None:
+        """Switch between dark and light themes."""
+        self._current_theme = "light" if self._current_theme == "dark" else "dark"
+        colors = THEMES[self._current_theme]
+        apply_theme(self, colors)
+
+        # Update theme button label
+        label = "☀ Light" if self._current_theme == "dark" else "🌙 Dark"
+        self._theme_button.configure(text=label)
+
+        # Update the status Text widget (not a ttk widget, needs manual config)
+        if self.status_text is not None:
+            self.status_text.configure(
+                bg=colors.entry_bg, fg=colors.status_fg,
+                insertbackground=colors.fg,
+            )
+
+        # Update treeview placeholder tag
+        if self.folder_tree is not None:
+            self.folder_tree.tag_configure("placeholder", foreground=colors.status_fg)
+
+        # Regenerate checkbox images for the new theme and reload tree
+        self._create_checkbox_images()
+        if self._tree_roots:
+            self._load_folder_tree(silent=True)
+
+        self._save_config()
 
     def _export_selected(self) -> None:
         do_shortcuts = self.export_shortcuts_var.get()

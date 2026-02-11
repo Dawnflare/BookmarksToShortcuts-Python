@@ -15,6 +15,7 @@ class AppConfig:
 
     bookmarks_path: str = ""
     output_path: str = ""
+    theme: str = "dark"
 
     @classmethod
     def load(cls) -> "AppConfig":
@@ -26,6 +27,7 @@ class AppConfig:
                 return cls(
                     bookmarks_path=data.get("bookmarks_path", ""),
                     output_path=data.get("output_path", ""),
+                    theme=data.get("theme", "dark"),
                 )
             except Exception:
                 pass
